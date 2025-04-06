@@ -9,9 +9,80 @@ mod tests {
     use std::time::Duration;
     use redis::{AsyncCommands, Client, Commands, RedisError};
     use redis::aio::MultiplexedConnection;
+    use redis::geo::{RadiusOptions, Unit};
 
     #[tokio::test]
-    async fn test_hashmap() -> Result<(), RedisError> {
+    async fn test_transaction() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        redis::pipe()
+            .atomic()
+            .set_ex("name", "eko", 2)
+            .set_ex("address", "indonesia", 2)
+            .exec_async(&mut con).await?;
+
+        let name: String = con.get("name").await?;
+        assert_eq!(name, "eko");
+
+        let address: String = con.get("address").await?;
+        assert_eq!(address, "indonesia");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pipeline() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        redis::pipe()
+            .set_ex("name", "eko", 2)
+            .set_ex("address", "indonesia", 2)
+            .exec_async(&mut con).await?;
+
+        let name: String = con.get("name").await?;
+        assert_eq!(name, "eko");
+
+        let address: String = con.get("address").await?;
+        assert_eq!(address, "indonesia");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_hyper_log_log() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        let _: () = con.del("visitors").await?;
+        let _: () = con.pfadd("visitors", ("eko", "kurniawan", "khannedy")).await?;
+        let _: () = con.pfadd("visitors", ("eko", "budi", "joko")).await?;
+        let _: () = con.pfadd("visitors", ("eko", "joko", "raul")).await?;
+
+        let total: i32 = con.pfcount("visitors").await?;
+        assert_eq!(total, 6);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_geo_point() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        let _: () = con.del("sellers").await?;
+        let _: () = con.geo_add("sellers", (106.822702, -6.177590, "toko a")).await?;
+        let _: () = con.geo_add("sellers", (106.820889, -6.174964, "toko b")).await?;
+
+        let distance: f64 = con.geo_dist("sellers", "toko a", "toko b", Unit::Kilometers).await?;
+        assert_eq!(0.3543, distance);
+
+        let result: Vec<String> = con.geo_radius("sellers", 106.821825, -6.175105, 0.5,
+                                                 Unit::Kilometers, RadiusOptions::default()).await?;
+        assert_eq!(vec!["toko b", "toko a"], result);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_hash() -> Result<(), RedisError> {
         let mut con = get_client().await?;
 
         let _: () = con.del("user:1").await?;
