@@ -4,8 +4,50 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZero;
+    use std::time::Duration;
     use redis::{AsyncCommands, Client, Commands, RedisError};
     use redis::aio::MultiplexedConnection;
+
+    #[tokio::test]
+    async fn test_list() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        let _: () = con.del("names").await?;
+        let _: () = con.rpush("names", "eko").await?;
+        let _: () = con.rpush("names", "kurniawan").await?;
+        let _: () = con.rpush("names", "khannedy").await?;
+
+        let len: i32 = con.llen("names").await?;
+        assert_eq!(3, len);
+
+        let names: Vec<String> = con.lrange("names", 0, -1).await?;
+        assert_eq!(vec!["eko", "kurniawan", "khannedy"], names);
+
+        let names: Vec<String> = con.lpop("names", NonZero::new(1)).await?;
+        assert_eq!(vec!["eko"], names);
+        let names: Vec<String> = con.lpop("names", NonZero::new(1)).await?;
+        assert_eq!(vec!["kurniawan"], names);
+        let names: Vec<String> = con.lpop("names", NonZero::new(1)).await?;
+        assert_eq!(vec!["khannedy"], names);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_string() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+        let _ : () = con.set_ex("name", "kurniawan", 2).await?;
+        let value: String = con.get("name").await?;
+        println!("{:?}", value);
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let value: Result<String, RedisError> = con.get("name").await;
+        assert_eq!(true, value.is_err());
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_async_connection() -> Result<(), RedisError> {
