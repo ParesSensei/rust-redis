@@ -4,10 +4,69 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::num::NonZero;
     use std::time::Duration;
     use redis::{AsyncCommands, Client, Commands, RedisError};
     use redis::aio::MultiplexedConnection;
+
+    #[tokio::test]
+    async fn test_hashmap() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        let _: () = con.del("user:1").await?;
+        let _: () = con.hset("user:1", "id", "1").await?;
+        let _: () = con.hset("user:1", "name", "eko").await?;
+        let _: () = con.hset("user:1", "email", "eko@gmail").await?;
+
+        let user: HashMap<String, String> = con.hgetall("user:1").await?;
+        assert_eq!("1", user.get("id").unwrap());
+        assert_eq!("eko", user.get("name").unwrap());
+        assert_eq!("eko@gmail", user.get("email").unwrap());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sorted_set() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        let _: () = con.del("names").await?;
+        let _: () = con.zadd("names", "eko", 100).await?;
+        let _: () = con.zadd("names", "kurniawan", 85).await?;
+        let _: () = con.zadd("names", "khannedy", 95).await?;
+
+        let len: i32 = con.zcard("names").await?;
+        assert_eq!(3, len);
+
+        let names: Vec<String> = con.zrange("names", 0, -1).await?;
+        assert_eq!(vec!["kurniawan", "khannedy", "eko"], names);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_set() -> Result<(), RedisError> {
+        let mut con = get_client().await?;
+
+        let _: () = con.del("names").await?;
+        let _: () = con.sadd("names", "eko").await?;
+        let _: () = con.sadd("names", "eko").await?;
+        let _: () = con.sadd("names", "kurniawan").await?;
+        let _: () = con.sadd("names", "kurniawan").await?;
+        let _: () = con.sadd("names", "khannedy").await?;
+        let _: () = con.sadd("names", "khannedy").await?;
+
+        let mut names: Vec<String> = con.smembers("names").await?;
+        names.sort();
+
+        let mut expected = vec!["eko", "kurniawan", "khannedy"];
+        expected.sort();
+
+        assert_eq!(expected, names);
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_list() -> Result<(), RedisError> {
